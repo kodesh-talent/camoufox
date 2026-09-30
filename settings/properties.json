@@ -1,0 +1,412 @@
+[
+  {
+    "property": "navigator.userAgent",
+    "type": "str",
+    "fingerprint": true
+  },
+  {
+    "property": "navigator.doNotTrack",
+    "type": "str",
+    "fingerprint": true
+  },
+  {
+    "property": "navigator.appVersion",
+    "type": "str",
+    "fingerprint": true
+  },
+  {
+    "property": "navigator.oscpu",
+    "type": "str",
+    "fingerprint": true
+  },
+  {
+    "property": "navigator.language",
+    "type": "str",
+    "fingerprint": true
+  },
+  {
+    "property": "navigator.platform",
+    "type": "str",
+    "fingerprint": true
+  },
+  {
+    "property": "navigator.hardwareConcurrency",
+    "type": "uint",
+    "fingerprint": true
+  },
+  {
+    "property": "navigator.maxTouchPoints",
+    "type": "uint",
+    "fingerprint": true
+  },
+  {
+    "property": "navigator.globalPrivacyControl",
+    "type": "bool",
+    "fingerprint": true
+  },
+  {
+    "property": "navigator.buildID",
+    "type": "str",
+    "fingerprint": true
+  },
+  {
+    "property": "screen.availHeight",
+    "type": "uint",
+    "fingerprint": true
+  },
+  {
+    "property": "screen.availWidth",
+    "type": "uint",
+    "fingerprint": true
+  },
+  {
+    "property": "screen.availTop",
+    "type": "uint",
+    "fingerprint": true
+  },
+  {
+    "property": "screen.availLeft",
+    "type": "uint",
+    "fingerprint": true
+  },
+  {
+    "property": "screen.height",
+    "type": "uint",
+    "fingerprint": true
+  },
+  {
+    "property": "screen.width",
+    "type": "uint",
+    "fingerprint": true
+  },
+  {
+    "property": "screen.colorDepth",
+    "type": "uint",
+    "fingerprint": true
+  },
+  {
+    "property": "screen.pixelDepth",
+    "type": "uint",
+    "fingerprint": true
+  },
+  {
+    "property": "window.outerHeight",
+    "type": "uint",
+    "fingerprint": true
+  },
+  {
+    "property": "window.outerWidth",
+    "type": "uint",
+    "fingerprint": true
+  },
+  {
+    "property": "window.innerHeight",
+    "type": "uint",
+    "fingerprint": true
+  },
+  {
+    "property": "window.innerWidth",
+    "type": "uint",
+    "fingerprint": true
+  },
+  {
+    "property": "window.screenX",
+    "type": "int",
+    "fingerprint": true
+  },
+  {
+    "property": "window.screenY",
+    "type": "int",
+    "fingerprint": true
+  },
+  {
+    "property": "window.devicePixelRatio",
+    "type": "double",
+    "fingerprint": true
+  },
+  {
+    "property": "headers.User-Agent",
+    "type": "str",
+    "fingerprint": true
+  },
+  {
+    "property": "headers.Accept-Language",
+    "type": "str",
+    "fingerprint": true
+  },
+  {
+    "property": "headers.Accept-Encoding",
+    "type": "str",
+    "fingerprint": true
+  },
+  {
+    "property": "webrtc:ipv4",
+    "type": "str",
+    "fingerprint": true
+  },
+  {
+    "property": "webrtc:ipv6",
+    "type": "str",
+    "fingerprint": true
+  },
+  {
+    "property": "fonts",
+    "type": "array",
+    "fingerprint": true
+  },
+  {
+    "property": "audio:seed",
+    "type": "uint",
+    "fingerprint": true
+  },
+  {
+    "property": "geolocation:latitude",
+    "type": "double",
+    "fingerprint": true
+  },
+  {
+    "property": "geolocation:longitude",
+    "type": "double",
+    "fingerprint": true
+  },
+  {
+    "property": "geolocation:accuracy",
+    "type": "double",
+    "fingerprint": true
+  },
+  {
+    "property": "timezone",
+    "type": "str",
+    "fingerprint": true
+  },
+  {
+    "property": "locale:language",
+    "type": "str",
+    "fingerprint": true
+  },
+  {
+    "property": "locale:region",
+    "type": "str",
+    "fingerprint": true
+  },
+  {
+    "property": "locale:script",
+    "type": "str",
+    "fingerprint": true
+  },
+  {
+    "property": "locale:all",
+    "type": "str",
+    "fingerprint": true
+  },
+  {
+    "property": "humanize",
+    "type": "bool",
+    "fingerprint": false
+  },
+  {
+    "property": "humanize:maxTime",
+    "type": "double",
+    "fingerprint": false
+  },
+  {
+    "property": "humanize:minTime",
+    "type": "double",
+    "fingerprint": false
+  },
+  {
+    "property": "showcursor",
+    "type": "bool",
+    "fingerprint": false
+  },
+  {
+    "property": "AudioContext:sampleRate",
+    "type": "uint",
+    "fingerprint": true
+  },
+  {
+    "property": "AudioContext:outputLatency",
+    "type": "double",
+    "fingerprint": true
+  },
+  {
+    "property": "AudioContext:maxChannelCount",
+    "type": "uint",
+    "fingerprint": true
+  },
+  {
+    "property": "webGl:renderer",
+    "type": "str",
+    "fingerprint": true
+  },
+  {
+    "property": "webGl:vendor",
+    "type": "str",
+    "fingerprint": true
+  },
+  {
+    "property": "webGl:supportedExtensions",
+    "type": "array",
+    "fingerprint": true
+  },
+  {
+    "property": "webGl2:supportedExtensions",
+    "type": "array",
+    "fingerprint": true
+  },
+  {
+    "property": "webGl:parameters",
+    "type": "dict",
+    "fingerprint": true
+  },
+  {
+    "property": "webGl2:parameters",
+    "type": "dict",
+    "fingerprint": true
+  },
+  {
+    "property": "webGl:shaderPrecisionFormats",
+    "type": "dict",
+    "fingerprint": true
+  },
+  {
+    "property": "webGl:shaderPrecisionFormats:blockIfNotDefined",
+    "type": "bool",
+    "fingerprint": true
+  },
+  {
+    "property": "webGl2:shaderPrecisionFormats",
+    "type": "dict",
+    "fingerprint": true
+  },
+  {
+    "property": "webGl2:shaderPrecisionFormats:blockIfNotDefined",
+    "type": "bool",
+    "fingerprint": true
+  },
+  {
+    "property": "webGl:contextAttributes",
+    "type": "dict",
+    "fingerprint": true
+  },
+  {
+    "property": "webGl2:contextAttributes",
+    "type": "dict",
+    "fingerprint": true
+  },
+  {
+    "property": "voices",
+    "type": "array",
+    "fingerprint": true
+  },
+  {
+    "property": "voices:blockIfNotDefined",
+    "type": "bool",
+    "fingerprint": true
+  },
+  {
+    "property": "mediaDevices:micros",
+    "type": "uint",
+    "fingerprint": true
+  },
+  {
+    "property": "mediaDevices:webcams",
+    "type": "uint",
+    "fingerprint": true
+  },
+  {
+    "property": "mediaDevices:speakers",
+    "type": "uint",
+    "fingerprint": true
+  },
+  {
+    "property": "mediaDevices:enabled",
+    "type": "bool",
+    "fingerprint": true
+  },
+  {
+    "property": "mediaDevices:microphoneLabels",
+    "type": "array",
+    "fingerprint": true
+  },
+  {
+    "property": "mediaDevices:microphoneGroups",
+    "type": "array",
+    "fingerprint": true
+  },
+  {
+    "property": "mediaDevices:webcamLabels",
+    "type": "array",
+    "fingerprint": true
+  },
+  {
+    "property": "mediaDevices:webcamGroups",
+    "type": "array",
+    "fingerprint": true
+  },
+  {
+    "property": "mediaDevices:speakerLabels",
+    "type": "array",
+    "fingerprint": true
+  },
+  {
+    "property": "mediaDevices:speakerGroups",
+    "type": "array",
+    "fingerprint": true
+  },
+  {
+    "property": "media:spoof_codecs",
+    "type": "bool",
+    "fingerprint": true
+  },
+  {
+    "property": "allowMainWorld",
+    "type": "bool",
+    "fingerprint": false
+  },
+  {
+    "property": "disableWorldIsolation",
+    "type": "bool",
+    "fingerprint": false
+  },
+  {
+    "property": "allowAddonNewtab",
+    "type": "bool",
+    "fingerprint": false
+  },
+  {
+    "property": "forceScopeAccess",
+    "type": "bool",
+    "fingerprint": false
+  },
+  {
+    "property": "disableTheming",
+    "type": "bool",
+    "fingerprint": false
+  },
+  {
+    "property": "instantAnimations",
+    "type": "bool",
+    "fingerprint": false
+  },
+  {
+    "property": "addons",
+    "type": "array",
+    "fingerprint": false
+  },
+  {
+    "property": "certificatePaths",
+    "type": "array",
+    "fingerprint": false
+  },
+  {
+    "property": "certificates",
+    "type": "array",
+    "fingerprint": false
+  },
+  {
+    "property": "debug",
+    "type": "bool",
+    "fingerprint": false
+  }
+]

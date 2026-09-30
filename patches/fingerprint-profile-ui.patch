@@ -1,0 +1,716 @@
+diff --git a/browser/base/content/appmenu-viewcache.inc.xhtml b/browser/base/content/appmenu-viewcache.inc.xhtml
+old mode 100644
+new mode 100755
+index a57eb6b9b8..1bbcde8df9
+--- a/browser/base/content/appmenu-viewcache.inc.xhtml
++++ b/browser/base/content/appmenu-viewcache.inc.xhtml
+@@ -180,6 +180,16 @@
+         </toolbarbutton>
+       </toolbaritem>
+       <toolbarseparator/>
++      <toolbarbutton id="appMenu-camoufox-fingerprint-export"
++                     class="subviewbutton"
++                     data-l10n-id="camoufox-fingerprint-export"/>
++      <toolbarbutton id="appMenu-camoufox-fingerprint-import"
++                     class="subviewbutton"
++                     data-l10n-id="camoufox-fingerprint-import"/>
++      <toolbarbutton id="appMenu-camoufox-fingerprint-clear"
++                     class="subviewbutton"
++                     data-l10n-id="camoufox-fingerprint-clear"/>
++      <toolbarseparator/>
+       <toolbarbutton id="appMenu-settings-button"
+                      class="subviewbutton"
+                      data-l10n-id="appmenuitem-settings"
+diff --git a/browser/components/customizableui/content/panelUI.js b/browser/components/customizableui/content/panelUI.js
+old mode 100644
+new mode 100755
+index a9a3765aa2..1a0292e422
+--- a/browser/components/customizableui/content/panelUI.js
++++ b/browser/components/customizableui/content/panelUI.js
+@@ -10,6 +10,7 @@ ChromeUtils.importESModule(
+ ChromeUtils.defineESModuleGetters(this, {
+   AppMenuNotifications: "resource://gre/modules/AppMenuNotifications.sys.mjs",
+   ASRouter: "resource:///modules/asrouter/ASRouter.sys.mjs",
++  CamoufoxFingerprint: "resource:///modules/CamoufoxFingerprint.sys.mjs",
+   MenuMessage: "resource:///modules/asrouter/MenuMessage.sys.mjs",
+   NewTabUtils: "resource://gre/modules/NewTabUtils.sys.mjs",
+   PanelMultiView:
+@@ -459,6 +460,15 @@ const PanelUI = {
+       case "appMenu-settings-button":
+         openPreferences();
+         break;
++      case "appMenu-camoufox-fingerprint-export":
++        CamoufoxFingerprint.exportCurrent(window);
++        break;
++      case "appMenu-camoufox-fingerprint-import":
++        CamoufoxFingerprint.importAndRestart(window);
++        break;
++      case "appMenu-camoufox-fingerprint-clear":
++        CamoufoxFingerprint.clearAndRestart(window);
++        break;
+       case "appMenu-more-button2":
+         this.showMoreToolsPanel(target);
+         break;
+@@ -753,6 +763,7 @@ const PanelUI = {
+       ASRouter.addImpression(message);
+     }
+     updateZoomUI(gBrowser.selectedBrowser);
++    CamoufoxFingerprint.updateMenu(document).catch(Cu.reportError);
+   },
+ 
+   _onHelpViewShow() {
+diff --git a/browser/locales/en-US/browser/appmenu.ftl b/browser/locales/en-US/browser/appmenu.ftl
+old mode 100644
+new mode 100755
+index 451657fd11..50e0b938e8
+--- a/browser/locales/en-US/browser/appmenu.ftl
++++ b/browser/locales/en-US/browser/appmenu.ftl
+@@ -83,6 +83,25 @@ appmenu-menu-button-opened2 =
+ appmenuitem-settings =
+     .label = Settings
+ 
++camoufox-fingerprint-export =
++    .label = Export Current Fingerprint…
++camoufox-fingerprint-import =
++    .label = Import Fingerprint and Restart…
++camoufox-fingerprint-clear =
++    .label = Unbind Fingerprint and Restart…
++camoufox-fingerprint-export-picker-title = Export Current Fingerprint
++camoufox-fingerprint-export-picker-button = Export
++camoufox-fingerprint-import-picker-title = Import Fingerprint
++camoufox-fingerprint-import-picker-button = Import
++camoufox-fingerprint-json-filter = JSON fingerprint files
++camoufox-fingerprint-restart-title = Restart { -brand-short-name }
++camoufox-fingerprint-import-restart-message =
++    Importing binds this fingerprint to the current profile. Restart now to apply it?
++camoufox-fingerprint-clear-restart-message =
++    Remove the fingerprint bound to this profile and restart now?
++camoufox-fingerprint-error-title = Fingerprint operation failed
++camoufox-fingerprint-error-message = { $error }
++
+ ## Zoom and Fullscreen Controls
+ 
+ appmenuitem-zoom-enlarge =
+diff --git a/browser/modules/CamoufoxFingerprint.sys.mjs b/browser/modules/CamoufoxFingerprint.sys.mjs
+new file mode 100755
+index 0000000000..c2c504ea87
+--- /dev/null
++++ b/browser/modules/CamoufoxFingerprint.sys.mjs
+@@ -0,0 +1,216 @@
++/* This Source Code Form is subject to the terms of the Mozilla Public
++ * License, v. 2.0. If a copy of the MPL was not distributed with this
++ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
++
++const FINGERPRINT_FILENAME = "camoufox-fingerprint.json";
++const MAX_FINGERPRINT_FILE_SIZE = 4 * 1024 * 1024;
++
++function browserMajor() {
++  return Number.parseInt(Services.appinfo.version, 10);
++}
++
++function profileFingerprintPath() {
++  return PathUtils.join(PathUtils.profileDir, FINGERPRINT_FILENAME);
++}
++
++function createDocument(fingerprint, createdAt = new Date().toISOString()) {
++  return {
++    format: "camoufox-fingerprint",
++    schemaVersion: 1,
++    browserMajor: browserMajor(),
++    createdAt,
++    fingerprint,
++  };
++}
++
++function canonicalizeDocument(document) {
++  const fingerprintJSON = ChromeUtils.camouCanonicalizeFingerprintJSON(
++    typeof document == "string" ? document : JSON.stringify(document),
++    browserMajor()
++  );
++  return JSON.parse(fingerprintJSON);
++}
++
++function clearLaunchFingerprintEnvironment() {
++  const environment = Cc[
++    "@mozilla.org/process/environment;1"
++  ].getService(Ci.nsIEnvironment);
++  environment.set("CAMOU_CONFIG", "");
++  for (let index = 1; ; ++index) {
++    const name = `CAMOU_CONFIG_${index}`;
++    if (!environment.exists(name)) {
++      break;
++    }
++    environment.set(name, "");
++  }
++}
++
++function restart() {
++  Services.startup.quit(
++    Ci.nsIAppStartup.eAttemptQuit | Ci.nsIAppStartup.eRestart
++  );
++}
++
++async function localize(document, id, args) {
++  return document.l10n.formatValue(id, args);
++}
++
++async function alertError(window, error) {
++  const [title, message] = await Promise.all([
++    localize(window.document, "camoufox-fingerprint-error-title"),
++    localize(window.document, "camoufox-fingerprint-error-message", {
++      error: error.message,
++    }),
++  ]);
++  Services.prompt.alert(window, title, message);
++}
++
++async function pickFile(window, mode) {
++  const saving = mode == Ci.nsIFilePicker.modeSave;
++  const ids = saving
++    ? [
++        "camoufox-fingerprint-export-picker-title",
++        "camoufox-fingerprint-export-picker-button",
++      ]
++    : [
++        "camoufox-fingerprint-import-picker-title",
++        "camoufox-fingerprint-import-picker-button",
++      ];
++  const [title, button, filter] = await Promise.all([
++    localize(window.document, ids[0]),
++    localize(window.document, ids[1]),
++    localize(window.document, "camoufox-fingerprint-json-filter"),
++  ]);
++  const picker = Cc["@mozilla.org/filepicker;1"].createInstance(
++    Ci.nsIFilePicker
++  );
++  picker.init(window.browsingContext, title, mode);
++  picker.appendFilter(filter, "*.json");
++  picker.appendFilters(Ci.nsIFilePicker.filterAll);
++  picker.okButtonLabel = button;
++  if (saving) {
++    picker.defaultExtension = "json";
++    picker.defaultString = `camoufox-fingerprint-${new Date()
++      .toISOString()
++      .slice(0, 10)}.json`;
++  }
++  const result = await new Promise(resolve => picker.open(resolve));
++  return result == Ci.nsIFilePicker.returnCancel ? null : picker.file.path;
++}
++
++async function confirmRestart(window, messageId) {
++  const [title, message] = await Promise.all([
++    localize(window.document, "camoufox-fingerprint-restart-title"),
++    localize(window.document, messageId),
++  ]);
++  return Services.prompt.confirm(window, title, message);
++}
++
++async function writeFingerprint(path, document) {
++  canonicalizeDocument(document);
++  const bytes = new TextEncoder().encode(`${JSON.stringify(document, null, 2)}\n`);
++  if (bytes.length > MAX_FINGERPRINT_FILE_SIZE) {
++    throw new Error("fingerprint file exceeds 4 MiB");
++  }
++  await IOUtils.write(path, bytes, { tmpPath: `${path}.tmp`, flush: true });
++}
++
++export async function exportFingerprint(path) {
++  const fingerprint = JSON.parse(ChromeUtils.camouGetFingerprintJSON());
++  await writeFingerprint(path, createDocument(fingerprint));
++}
++
++export async function readFingerprint(path) {
++  const stat = await IOUtils.stat(path);
++  if (stat.size > MAX_FINGERPRINT_FILE_SIZE) {
++    throw new Error("fingerprint file exceeds 4 MiB");
++  }
++  return canonicalizeDocument(await IOUtils.readUTF8(path));
++}
++
++/**
++ * Persist a validated fingerprint for the current profile. Import uses this
++ * entry point; a future generator can call the same function with its final
++ * fingerprint instead of introducing another persistence path.
++ */
++export async function bindFingerprint(
++  fingerprint,
++  { createdAt = new Date().toISOString(), restartBrowser = true } = {}
++) {
++  const canonical = canonicalizeDocument(createDocument(fingerprint, createdAt));
++  const document = createDocument(canonical, createdAt);
++  const path = profileFingerprintPath();
++  await writeFingerprint(path, document);
++  if (restartBrowser) {
++    restart();
++  }
++}
++
++export const CamoufoxFingerprint = {
++  async isBound() {
++    return IOUtils.exists(profileFingerprintPath());
++  },
++
++  async updateMenu(document) {
++    const clearButton = document.getElementById(
++      "appMenu-camoufox-fingerprint-clear"
++    );
++    if (clearButton) {
++      clearButton.disabled = !(await this.isBound());
++    }
++  },
++
++  async exportCurrent(window) {
++    try {
++      const path = await pickFile(window, Ci.nsIFilePicker.modeSave);
++      if (!path) {
++        return;
++      }
++      await exportFingerprint(path);
++    } catch (error) {
++      await alertError(window, error);
++    }
++  },
++
++  async importAndRestart(window) {
++    try {
++      const path = await pickFile(window, Ci.nsIFilePicker.modeOpen);
++      if (!path) {
++        return;
++      }
++      const fingerprint = await readFingerprint(path);
++      if (
++        !(await confirmRestart(
++          window,
++          "camoufox-fingerprint-import-restart-message"
++        ))
++      ) {
++        return;
++      }
++      await bindFingerprint(fingerprint);
++    } catch (error) {
++      await alertError(window, error);
++    }
++  },
++
++  async clearAndRestart(window) {
++    try {
++      if (!(await this.isBound())) {
++        return;
++      }
++      if (
++        !(await confirmRestart(
++          window,
++          "camoufox-fingerprint-clear-restart-message"
++        ))
++      ) {
++        return;
++      }
++      await IOUtils.remove(profileFingerprintPath(), { ignoreAbsent: true });
++      clearLaunchFingerprintEnvironment();
++      restart();
++    } catch (error) {
++      await alertError(window, error);
++    }
++  },
++};
+diff --git a/browser/modules/moz.build b/browser/modules/moz.build
+old mode 100644
+new mode 100755
+index eebf824044..1e5d5fbb7b
+--- a/browser/modules/moz.build
++++ b/browser/modules/moz.build
+@@ -117,6 +117,7 @@ EXTRA_JS_MODULES += [
+     "BrowserUIUtils.sys.mjs",
+     "BrowserUsageTelemetry.sys.mjs",
+     "BrowserWindowTracker.sys.mjs",
++    "CamoufoxFingerprint.sys.mjs",
+     "ContentCrashHandlers.sys.mjs",
+     "Dedupe.sys.mjs",
+     "Discovery.sys.mjs",
+diff --git a/browser/modules/test/unit/test_CamoufoxFingerprint.js b/browser/modules/test/unit/test_CamoufoxFingerprint.js
+new file mode 100755
+index 0000000000..d64b07b437
+--- /dev/null
++++ b/browser/modules/test/unit/test_CamoufoxFingerprint.js
+@@ -0,0 +1,85 @@
++/* This Source Code Form is subject to the terms of the Mozilla Public
++ * License, v. 2.0. If a copy of the MPL was not distributed with this
++ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
++
++const { bindFingerprint, CamoufoxFingerprint } = ChromeUtils.importESModule(
++  "resource:///modules/CamoufoxFingerprint.sys.mjs"
++);
++
++const BROWSER_MAJOR = Number.parseInt(Services.appinfo.version, 10);
++
++function documentWith(fingerprint, overrides = {}) {
++  return JSON.stringify({
++    format: "camoufox-fingerprint",
++    schemaVersion: 1,
++    browserMajor: BROWSER_MAJOR,
++    createdAt: "2026-09-29T00:00:00.000Z",
++    fingerprint,
++    ...overrides,
++  });
++}
++
++add_task(function test_canonicalizes_safe_fingerprint() {
++  const result = JSON.parse(
++    ChromeUtils.camouCanonicalizeFingerprintJSON(
++      documentWith({
++        "navigator.language": "zh-CN",
++        "screen.width": 1920,
++        "webGl:parameters": { 3379: 16384 },
++      }),
++      BROWSER_MAJOR
++    )
++  );
++  Assert.deepEqual(result, {
++    "navigator.language": "zh-CN",
++    "screen.width": 1920,
++    "webGl:parameters": { 3379: 16384 },
++  });
++});
++
++add_task(function test_rejects_runtime_control_properties() {
++  Assert.throws(
++    () =>
++      ChromeUtils.camouCanonicalizeFingerprintJSON(
++        documentWith({ addons: ["malicious.xpi"] }),
++        BROWSER_MAJOR
++      ),
++    /not allowed/
++  );
++});
++
++add_task(function test_rejects_wrong_browser_major() {
++  Assert.throws(
++    () =>
++      ChromeUtils.camouCanonicalizeFingerprintJSON(
++        documentWith(
++          { "navigator.language": "zh-CN" },
++          { browserMajor: BROWSER_MAJOR + 1 }
++        ),
++        BROWSER_MAJOR
++      ),
++    /major version/
++  );
++});
++
++add_task(async function test_binding_round_trip_and_clear_state() {
++  do_get_profile();
++  await bindFingerprint(
++    {
++      "navigator.language": "zh-CN",
++      "screen.width": 1920,
++    },
++    { createdAt: "2026-09-29T00:00:00.000Z", restartBrowser: false }
++  );
++  Assert.ok(await CamoufoxFingerprint.isBound());
++  const stored = await IOUtils.readJSON(
++    PathUtils.join(PathUtils.profileDir, "camoufox-fingerprint.json")
++  );
++  Assert.equal(stored.format, "camoufox-fingerprint");
++  Assert.equal(stored.schemaVersion, 1);
++  Assert.equal(stored.browserMajor, BROWSER_MAJOR);
++  Assert.deepEqual(stored.fingerprint, {
++    "navigator.language": "zh-CN",
++    "screen.width": 1920,
++  });
++});
+diff --git a/browser/modules/test/unit/xpcshell.toml b/browser/modules/test/unit/xpcshell.toml
+old mode 100644
+new mode 100755
+index d0c573c34e..b6363cf11b
+--- a/browser/modules/test/unit/xpcshell.toml
++++ b/browser/modules/test/unit/xpcshell.toml
+@@ -12,6 +12,8 @@ prefs = ["browser.contextual-services.contextId.rust-component.enabled=false"]
+ ["test_ContextId_RustBackend.js"]
+ prefs = ["browser.contextual-services.contextId.rust-component.enabled=true"]
+ 
++["test_CamoufoxFingerprint.js"]
++
+ ["test_Dedupe.js"]
+ 
+ ["test_E10SUtils_nested_URIs.js"]
+diff --git a/dom/base/ChromeUtils.cpp b/dom/base/ChromeUtils.cpp
+index a7fdd6efa0..db9c779d75 100644
+--- a/dom/base/ChromeUtils.cpp
++++ b/dom/base/ChromeUtils.cpp
+@@ -3,12 +3,10 @@
+  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+ 
+ #include "ChromeUtils.h"
++
+ #include "MaskConfig.hpp"
+ 
+ // Camoufox: for CamouSealFingerprintSetters below.
+-#include "mozilla/dom/ScriptSettings.h"
+-#include "nsGlobalWindowInner.h"
+-
+ #include "JSOracleParent.h"
+ #include "NonSharedGlobalSyncModuleLoaderScope.h"
+ #include "ThirdPartyUtil.h"
+@@ -63,6 +61,7 @@
+ #include "mozilla/dom/Promise.h"
+ #include "mozilla/dom/Record.h"
+ #include "mozilla/dom/ReportingHeader.h"
++#include "mozilla/dom/ScriptSettings.h"
+ #include "mozilla/dom/ServiceWorkerUtils.h"
+ #include "mozilla/dom/SharedScriptCache.h"
+ #include "mozilla/dom/UnionTypes.h"
+@@ -81,6 +80,7 @@
+ #include "nsContentUtils.h"
+ #include "nsControllerCommandTable.h"
+ #include "nsDocShell.h"
++#include "nsGlobalWindowInner.h"
+ #include "nsIException.h"
+ #include "nsIRFPTargetSetIDL.h"
+ #include "nsIURIFixup.h"
+@@ -2830,17 +2830,50 @@ void ChromeUtils::CamouGetStringList(GlobalObject& aGlobal,
+   aRetVal.Clear();
+ }
+ 
++/* static */
++void ChromeUtils::CamouGetFingerprintJSON(GlobalObject& aGlobal,
++                                          nsAString& aRetVal,
++                                          ErrorResult& aRv) {
++  std::string error;
++  auto value = MaskConfig::CurrentFingerprintJson(error);
++  if (!value) {
++    aRv.ThrowTypeError(nsDependentCString(error.c_str()));
++    return;
++  }
++  aRetVal.Assign(NS_ConvertUTF8toUTF16(*value));
++}
++
++/* static */
++void ChromeUtils::CamouCanonicalizeFingerprintJSON(
++    GlobalObject& aGlobal, const nsAString& aDocumentJSON,
++    uint32_t aBrowserMajor, nsAString& aRetVal, ErrorResult& aRv) {
++  std::string error;
++  auto value = MaskConfig::CanonicalizeFingerprintDocument(
++      NS_ConvertUTF16toUTF8(aDocumentJSON).get(), aBrowserMajor, error);
++  if (!value) {
++    aRv.ThrowTypeError(nsDependentCString(error.c_str()));
++    return;
++  }
++  aRetVal.Assign(NS_ConvertUTF8toUTF16(*value));
++}
++
+ // Camoufox: every per-context fingerprint setter, in the order the managers
+ // above are listed. Kept next to the seal because the seal is the only place
+ // that needs the names as a set -- each manager otherwise knows only its own.
+ static const char* const kCamouFingerprintSetters[] = {
+-    "setNavigatorPlatform", "setNavigatorOscpu",
+-    "setNavigatorHardwareConcurrency", "setNavigatorUserAgent",
+-    "setScreenDimensions", "setScreenColorDepth",
+-    "setWebGLVendor", "setWebGLRenderer",
+-    "setWebRTCIPv4", "setWebRTCIPv6",
++    "setNavigatorPlatform",
++    "setNavigatorOscpu",
++    "setNavigatorHardwareConcurrency",
++    "setNavigatorUserAgent",
++    "setScreenDimensions",
++    "setScreenColorDepth",
++    "setWebGLVendor",
++    "setWebGLRenderer",
++    "setWebRTCIPv4",
++    "setWebRTCIPv6",
+     "setFontList",
+-    "setAudioFingerprintSeed", "setSpeechVoices",
++    "setAudioFingerprintSeed",
++    "setSpeechVoices",
+     "setTimezone",
+ };
+ 
+diff --git a/dom/base/ChromeUtils.h b/dom/base/ChromeUtils.h
+index 677194cf17..3e76b5d621 100644
+--- a/dom/base/ChromeUtils.h
++++ b/dom/base/ChromeUtils.h
+@@ -361,14 +361,24 @@ class ChromeUtils {
+                                double aDefaultValue);
+ 
+   static bool CamouGetBool(GlobalObject& aGlobal, const nsAString& aVarName,
+-                            bool aDefaultValue);
++                           bool aDefaultValue);
+ 
+   static void CamouGetString(GlobalObject& aGlobal, const nsAString& aVarName,
+                              nsAString& aRetVal);
+ 
+-  static void CamouGetStringList(GlobalObject& aGlobal, const nsAString& aVarName,
++  static void CamouGetStringList(GlobalObject& aGlobal,
++                                 const nsAString& aVarName,
+                                  nsTArray<nsString>& aRetVal);
+ 
++  static void CamouGetFingerprintJSON(GlobalObject& aGlobal, nsAString& aRetVal,
++                                      ErrorResult& aRv);
++
++  static void CamouCanonicalizeFingerprintJSON(GlobalObject& aGlobal,
++                                               const nsAString& aDocumentJSON,
++                                               uint32_t aBrowserMajor,
++                                               nsAString& aRetVal,
++                                               ErrorResult& aRv);
++
+   static void CamouSealFingerprintSetters(GlobalObject& aGlobal,
+                                           uint64_t aInnerWindowId);
+ 
+diff --git a/dom/chrome-webidl/ChromeUtils.webidl b/dom/chrome-webidl/ChromeUtils.webidl
+old mode 100644
+new mode 100755
+index fbf030ac2e..e41cef0bf5
+--- a/dom/chrome-webidl/ChromeUtils.webidl
++++ b/dom/chrome-webidl/ChromeUtils.webidl
+@@ -969,6 +969,19 @@ partial namespace ChromeUtils {
+    */
+   sequence<DOMString> camouGetStringList(DOMString varName);
+ 
++  /**
++   * Return the fingerprint-bearing subset of the active Camoufox config.
++   */
++  [Throws]
++  DOMString camouGetFingerprintJSON();
++
++  /**
++   * Validate an exported fingerprint document and return canonical config JSON.
++   */
++  [Throws]
++  DOMString camouCanonicalizeFingerprintJSON(DOMString documentJSON,
++                                               unsigned long browserMajor);
++
+   /**
+    * Camoufox: open and close the window.setXxx() fingerprint setters.
+    *
+diff --git a/toolkit/xre/moz.build b/toolkit/xre/moz.build
+old mode 100644
+new mode 100755
+index d530fd7971..752653e1df
+--- a/toolkit/xre/moz.build
++++ b/toolkit/xre/moz.build
+@@ -238,6 +238,7 @@ LOCAL_INCLUDES += [
+     "../components/windowwatcher",
+     "../mozapps/update/common",
+     "../profile",
++    "/camoucfg",
+     "/config",
+     "/dom/base",
+     "/dom/commandhandler",
+diff --git a/toolkit/xre/nsAppRunner.cpp b/toolkit/xre/nsAppRunner.cpp
+old mode 100644
+new mode 100755
+index 1cf5753154..5f043e549f
+--- a/toolkit/xre/nsAppRunner.cpp
++++ b/toolkit/xre/nsAppRunner.cpp
+@@ -5,6 +5,7 @@
+ #include "mozilla/dom/ContentParent.h"
+ #include "mozilla/dom/ContentChild.h"
+ #include "mozilla/ipc/GeckoChildProcessHost.h"
++#include "MaskConfig.hpp"
+ 
+ #include "mozilla/AppShutdown.h"
+ #include "mozilla/Assertions.h"
+@@ -519,6 +520,78 @@ static MOZ_FORMAT_PRINTF(2, 3) void Output(bool isError, const char* fmt, ...) {
+   va_end(ap);
+ }
+ 
++static nsresult LoadCamoufoxProfileFingerprint(nsIFile* aProfileDir) {
++  nsCOMPtr<nsIFile> fingerprintFile;
++  nsresult rv = aProfileDir->Clone(getter_AddRefs(fingerprintFile));
++  NS_ENSURE_SUCCESS(rv, rv);
++  rv = fingerprintFile->AppendNative("camoufox-fingerprint.json"_ns);
++  NS_ENSURE_SUCCESS(rv, rv);
++
++  bool exists = false;
++  rv = fingerprintFile->Exists(&exists);
++  NS_ENSURE_SUCCESS(rv, rv);
++  if (!exists) {
++    return NS_OK;
++  }
++
++  int64_t fileSize = 0;
++  rv = fingerprintFile->GetFileSize(&fileSize);
++  NS_ENSURE_SUCCESS(rv, rv);
++  if (fileSize <= 0 || fileSize > 4 * 1024 * 1024) {
++    Output(true,
++           "The profile fingerprint file is empty or exceeds the 4 MiB limit. "
++           "Remove camoufox-fingerprint.json from the profile to recover.\n");
++    fflush(stderr);
++    return NS_ERROR_FILE_CORRUPTED;
++  }
++
++  PRFileDesc* fileDesc = nullptr;
++  rv = fingerprintFile->OpenNSPRFileDesc(PR_RDONLY, 0, &fileDesc);
++  NS_ENSURE_SUCCESS(rv, rv);
++  if (!fileDesc) {
++    return NS_ERROR_FILE_NOT_FOUND;
++  }
++
++  nsAutoCString documentJSON;
++  documentJSON.SetLength(static_cast<uint32_t>(fileSize));
++  int32_t bytesRead = PR_Read(fileDesc, documentJSON.BeginWriting(),
++                              static_cast<int32_t>(fileSize));
++  PR_Close(fileDesc);
++  if (bytesRead != fileSize) {
++    return NS_ERROR_FILE_CORRUPTED;
++  }
++
++  nsAutoCString majorString(gAppData->version);
++  int32_t separator = majorString.FindChar('.');
++  if (separator >= 0) {
++    majorString.Truncate(separator);
++  }
++  nsresult parseRv;
++  int32_t major = majorString.ToInteger(&parseRv);
++  if (NS_FAILED(parseRv) || major < 0) {
++    return NS_ERROR_UNEXPECTED;
++  }
++
++  std::string error;
++  auto config = MaskConfig::CanonicalizeFingerprintDocument(
++      std::string(documentJSON.get(), documentJSON.Length()),
++      static_cast<uint32_t>(major), error);
++  if (!config) {
++    Output(true,
++           "The profile fingerprint file is invalid: %s. Remove "
++           "camoufox-fingerprint.json from the profile to recover.\n",
++           error.c_str());
++    fflush(stderr);
++    return NS_ERROR_FILE_CORRUPTED;
++  }
++  if (!MaskConfig::SetConfigEnvironment(*config)) {
++    Output(true, "Could not activate the profile fingerprint.\n");
++    fflush(stderr);
++    return NS_ERROR_FAILURE;
++  }
++  return NS_OK;
++}
++
+ /**
+  * Check for a commandline flag. If the flag takes a parameter, the
+  * parameter is returned in aParam. Flags may be in the form -arg or
+@@ -5388,6 +5461,13 @@ int XREMain::XRE_mainStartup(bool* aExitFlag,
+     return 1;
+   }
+ 
++  if (!gDoProfileReset) {
++    rv = LoadCamoufoxProfileFingerprint(mProfD);
++    if (NS_FAILED(rv)) {
++      return 1;
++    }
++  }
++
+ #if defined(MOZ_HAS_REMOTE)
+   if (gRemoteService) {
+     // Use the full profile path to identify the profile.
+@@ -5635,6 +5715,11 @@ int XREMain::XRE_mainStartup(bool* aExitFlag,
+       NS_WARNING("Profile reset failed.");
+       return 1;
+     }
++
++    rv = LoadCamoufoxProfileFingerprint(mProfD);
++    if (NS_FAILED(rv)) {
++      return 1;
++    }
+   }
+ 
+   gProfileLock = mProfileLock;
